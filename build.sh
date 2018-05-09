@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 build_log="buildLog"
 current_path=$(cd `dirname $0`; pwd)

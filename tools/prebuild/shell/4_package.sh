@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 
 # "----------------------------------------------"
 current_path=`pwd`
+
 #default package file name
-package_name="monitor-api"
+package_name="monitor-api-package"
 package_file="$package_name.tar.gz"
 # "----------------------------------------------"
 
@@ -13,8 +14,7 @@ if [ -d "$package_file" ]
 then
     rm -rf "$package_file"
 fi
-mkdir "$package_name"
-mkdir "$package_name/log"
+mkdir -p "$package_name"
 cp -R bin/* "$package_name"
 cp -R "conf" "$package_name"
 
