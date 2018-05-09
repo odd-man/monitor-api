@@ -8,12 +8,10 @@ package rpc
 import (
 	"net/rpc/jsonrpc"
 
-	"github.com/seeleteam/monitor-api/core/logs"
+	slog "github.com/seeleteam/monitor-api/log"
 )
 
-type logger interface {
-	Println(v ...interface{})
-}
+var log = slog.GetLogger("rpc", true)
 
 // MonitorRPC json_rpc client
 type MonitorRPC struct {
@@ -55,7 +53,7 @@ func (rpc *MonitorRPC) call(serviceMethod string, args interface{}, reply interf
 		return err
 	}
 	if rpc.Debug {
-		logs.Debug("%s\nRequest: %v\nResponse: %v\n", serviceMethod, args, &reply)
+		log.Debug("%s\nRequest: %v\nResponse: %v\n", serviceMethod, args, &reply)
 	}
 	return nil
 }

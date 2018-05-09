@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/seeleteam/monitor-api/api/routers"
-	"github.com/seeleteam/monitor-api/core/logs"
 )
 
 // EngineConfig gin engine config
@@ -38,7 +37,7 @@ func (config *EngineConfig) initEngineConfig() *gin.Engine {
 
 	// use logs middleware logurs
 	// e.Use(gin.Logger())
-	e.Use(logs.Logger(logs.GetLogger()))
+	// e.Use(logs.Logger(logs.GetLogger()))
 
 	// use recovery middleware
 	e.Use(gin.Recovery())

@@ -3,7 +3,7 @@
 *  @copyright defined in monitor-api/LICENSE
  */
 
-package logs
+package log
 
 import (
 	"time"

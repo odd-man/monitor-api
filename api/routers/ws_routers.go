@@ -14,9 +14,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"github.com/seeleteam/monitor-api/core/logs"
 	"github.com/seeleteam/monitor-api/core/utils"
+	slog "github.com/seeleteam/monitor-api/log"
 )
+
+var log = slog.GetLogger("api-routers", false)
 
 // InitWsRouters init the web socket api
 func InitWsRouters(e *gin.Engine) {
@@ -42,14 +44,14 @@ var upGrader = websocket.Upgrader{
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upGrader.Upgrade(w, r, nil)
 	if err != nil {
-		logs.Error("Failed to set websocket upgrade: %+v", err)
+		log.Error("Failed to set websocket upgrade: %+v", err)
 		return
 	}
 	for {
 		msgType, msgData, err := conn.ReadMessage()
 		switch err.(type) {
 		case *websocket.CloseError:
-			logs.Error("websocket is closed, error is %v", err)
+			log.Error("websocket is closed, error is %v", err)
 			return
 		default:
 		}
@@ -65,17 +67,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		var msg map[string][]interface{}
 		err = json.Unmarshal(msgData, &msg)
 		if err != nil {
-			logs.Error("WsHandler receive msg %v", string(msgData))
+			log.Error("WsHandler receive msg %v", string(msgData))
 		}
 
 		resultData := make(map[string][]interface{})
 
 		command, ok := msg["emit"][0].(string)
 		if !ok {
-			logs.Error("Invalid stats server message type", "type", msg["emit"][0])
+			log.Error("Invalid stats server message type", "type", msg["emit"][0])
 			return
 		}
-		logs.Debug("receive msg len is %v, msg is %+v\n", len(msg["emit"]), utils.StructSerialize(msg))
+		log.Debug("receive msg len is %v, msg is %+v\n", len(msg["emit"]), utils.StructSerialize(msg))
 		if len(msg["emit"]) == 2 && command == "node-ping" {
 			hostname, _ := os.Hostname()
 			resultData = map[string][]interface{}{
@@ -87,11 +89,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			// write
 			responseData := utils.StructSerialize(resultData)
 			conn.WriteMessage(msgType, []byte(responseData))
-			logs.Debug("output message, type(1=text, 2=binary): %+v, msg: %+v\n", msgType, responseData)
+			log.Debug("output message, type(1=text, 2=binary): %+v, msg: %+v\n", msgType, responseData)
 		} else {
 			// write
 			conn.WriteMessage(msgType, msgData)
-			logs.Debug("output message, type(1=text, 2=binary): %+v, msg: %+v\n", msgType, string(msgData))
+			log.Debug("output message, type(1=text, 2=binary): %+v, msg: %+v\n", msgType, string(msgData))
 		}
 	}
 }

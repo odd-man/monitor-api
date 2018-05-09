@@ -13,7 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/seeleteam/monitor-api/config"
-	"github.com/seeleteam/monitor-api/core/logs"
 )
 
 const (
@@ -34,7 +33,7 @@ func GetServer(g *errgroup.Group, handlerConfig ...*EngineConfig) (slServer *Mon
 
 	currentServerConfig := config.SeeleConfig.ServerConfig
 	if currentServerConfig == nil {
-		logs.Fatal("error nil currentServerConfig")
+		panic("error nil currentServerConfig")
 	}
 
 	defaultEngineConfig := currentServerConfig.EngineConfig
@@ -42,7 +41,7 @@ func GetServer(g *errgroup.Group, handlerConfig ...*EngineConfig) (slServer *Mon
 	if len(handlerConfig) == 0 {
 		// use default config
 		if defaultEngineConfig == nil {
-			logs.Fatal("error nil defaultEngineConfig")
+			panic("error nil defaultEngineConfig")
 		}
 
 		currentEngineConfig = &EngineConfig{

@@ -10,10 +10,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/seeleteam/monitor-api/core/logs"
+	slog "github.com/seeleteam/monitor-api/log"
 )
 
-// Ping defaut for test
+var log = slog.GetLogger("api-handlers", false)
+
+// Ping default for test
 func Ping() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(200, H{
@@ -22,7 +24,7 @@ func Ping() gin.HandlerFunc {
 	}
 }
 
-// Pong defaut for test
+// Pong default for test
 func Pong() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(204, H{
@@ -31,17 +33,17 @@ func Pong() gin.HandlerFunc {
 	}
 }
 
-// Kong defaut for test
+// Kong default for test
 func Kong() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code, err := c.Writer.WriteString("Kong" + c.Request.URL.Path)
 		if err != nil {
-			logs.Error("error is %v %v", code, err)
-			logs.Errorln("error is ", code, err)
+			log.Error("error is %v %v", code, err)
+			log.Errorln("error is ", code, err)
 
 		} else {
-			logs.Info("info is %v and time now %v", code, time.Now())
-			logs.Infoln("info is ", code, time.Now().Nanosecond())
+			log.Info("info is %v and time now %v", code, time.Now())
+			log.Infoln("info is ", code, time.Now().Nanosecond())
 		}
 	}
 }
@@ -56,7 +58,7 @@ func LongAsync() gin.HandlerFunc {
 			time.Sleep(5 * time.Second)
 
 			// note that you are using the copied context "cCp", IMPORTANT
-			logs.Printf("Done! in path %v", cCp.Request.URL.Path)
+			log.Printf("Done! in path %v", cCp.Request.URL.Path)
 		}()
 	}
 }

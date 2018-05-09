@@ -19,8 +19,9 @@ import (
 
 	"golang.org/x/net/websocket"
 
+	"github.com/astaxie/beego/logs"
 	"github.com/seeleteam/monitor-api/config"
-	"github.com/seeleteam/monitor-api/core/logs"
+	"github.com/seeleteam/monitor-api/log"
 	"github.com/seeleteam/monitor-api/rpc"
 )
 
@@ -28,6 +29,7 @@ import (
 // chain statistics up to a monitoring server.
 type Service struct {
 	rpc *rpc.MonitorRPC // json rpc
+	log *log.MonitorLog
 
 	hostname string // hostname of the node to display on the monitoring page
 	node     string // Name of the node to display on the monitoring page
@@ -50,7 +52,7 @@ type Service struct {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(url string, rpc *rpc.MonitorRPC) (*Service, error) {
+func New(url string, rpc *rpc.MonitorRPC, log *log.MonitorLog) (*Service, error) {
 	// Parse the web socket connection url
 	if url == "" {
 		//addr format should be host:port!
@@ -84,6 +86,7 @@ func New(url string, rpc *rpc.MonitorRPC) (*Service, error) {
 
 	return &Service{
 		rpc:                        rpc,
+		log:                        log,
 		hostname:                   hostname,
 		node:                       hostname,
 		host:                       host,
@@ -133,7 +136,7 @@ func (s *Service) loop() {
 			}
 		}
 		if err != nil {
-			logs.Warn("Stats server unreachable(resend after %v), err %v", s.delayReConnTime, err)
+			s.log.Warn("Stats server unreachable(resend after %v), err %v", s.delayReConnTime, err)
 			time.Sleep(s.delayReConnTime)
 			continue
 		}
@@ -143,7 +146,7 @@ func (s *Service) loop() {
 		// first get the node base and append s.node
 		coinBase, err := s.getCoinBase(conn)
 		if err != nil {
-			logs.Warn("Initial get coinBase failed(reconnect after %v), err %v", s.delaySendTime, err)
+			s.log.Warn("Initial get coinBase failed(reconnect after %v), err %v", s.delaySendTime, err)
 			if conn != nil {
 				conn.Close()
 			}
@@ -154,7 +157,7 @@ func (s *Service) loop() {
 
 		//Send the initial stats so our node looks decent from the get go
 		if err = s.reportAllNodeInfo(conn); err != nil {
-			logs.Warn("Initial stats report failed(reconnect after %v), err %v", s.delaySendTime, err)
+			s.log.Warn("Initial stats report failed(reconnect after %v), err %v", s.delaySendTime, err)
 			if conn != nil {
 				conn.Close()
 			}
@@ -170,12 +173,12 @@ func (s *Service) loop() {
 			select {
 			case <-fullReport.C:
 				if err = s.report(conn); err != nil {
-					logs.Warn("Full stats report failed", "err", err)
+					s.log.Warn("Full stats report failed", "err", err)
 				}
 
 			case <-blockReport.C:
 				if err = s.reportCurrentBlock(conn); err != nil {
-					logs.Warn("Current block report failed", "err", err)
+					s.log.Warn("Current block report failed", "err", err)
 				}
 			}
 		}
@@ -196,17 +199,17 @@ func (s *Service) readLoop(conn *websocket.Conn) {
 		// Retrieve the next generic network packet and bail out on error
 		var msg map[string][]interface{}
 		if err := websocket.JSON.Receive(conn, &msg); err != nil {
-			logs.Warn("Failed to decode stats server message", "err", err)
+			s.log.Warn("Failed to decode stats server message", "err", err)
 			return
 		}
-		logs.Debug("Received message from stats server", "msg", msg)
+		s.log.Debug("Received message from stats server", "msg", msg)
 		if len(msg["emit"]) == 0 {
-			logs.Warn("Stats server sent non-broadcast", "msg", msg)
+			s.log.Warn("Stats server sent non-broadcast", "msg", msg)
 			return
 		}
 		command, ok := msg["emit"][0].(string)
 		if !ok {
-			logs.Warn("Invalid stats server message type", "type", msg["emit"][0])
+			s.log.Warn("Invalid stats server message type", "type", msg["emit"][0])
 			return
 		}
 		// If the message is a ping reply, deliver (someone must be listening!)
@@ -217,12 +220,12 @@ func (s *Service) readLoop(conn *websocket.Conn) {
 				continue
 			default:
 				// Ping routine dead, abort
-				logs.Warn("Stats server pinger seems to have died")
+				s.log.Warn("Stats server pinger seems to have died")
 				return
 			}
 		}
 		// Report anything else and continue
-		logs.Info("stats message", "msg", msg)
+		s.log.Info("stats message", "msg", msg)
 	}
 }
 
@@ -294,9 +297,9 @@ func (s *Service) reportLatency(conn *websocket.Conn) error {
 		}},
 	}
 	// Send back the measured latency
-	logs.Debug("Sending measured latency to seele monitor", "latency", latency)
+	s.log.Debug("Sending measured latency to seele monitor", "latency", latency)
 	jsonReport, _ := json.Marshal(report)
-	logs.Debug("Sending node latency to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node latency to monitor\n %v", string(jsonReport))
 	return websocket.JSON.Send(conn, report)
 }
 
@@ -312,7 +315,7 @@ func (s *Service) reportNodeInfo(conn *websocket.Conn) error {
 		"emit": {"nodeInfo", nodeInfo},
 	}
 	jsonReport, _ := json.Marshal(report)
-	logs.Debug("Sending node info to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node info to monitor\n %v", string(jsonReport))
 	return websocket.JSON.Send(conn, report)
 }
 
@@ -321,14 +324,14 @@ func (s *Service) reportNodeInfo(conn *websocket.Conn) error {
 func (s *Service) reportNodeStats(conn *websocket.Conn) error {
 	nodeStats, err := s.getNodeStats(conn)
 	if err != nil {
-		logs.Error("rpc reportNodeStats error %v", err)
+		s.log.Error("rpc reportNodeStats error %v", err)
 		return err
 	}
 	report := map[string][]interface{}{
 		"emit": {"stats", nodeStats},
 	}
 	jsonReport, _ := json.Marshal(report)
-	logs.Debug("Sending node stats to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node stats to monitor\n %v", string(jsonReport))
 	return websocket.JSON.Send(conn, report)
 }
 
@@ -344,9 +347,9 @@ func (s *Service) getLatency(conn *websocket.Conn) (string, error) {
 		}},
 	}
 	jsonReport, _ := json.Marshal(ping)
-	logs.Debug("Sending node ping to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node ping to monitor\n %v", string(jsonReport))
 	if err := websocket.JSON.Send(conn, ping); err != nil {
-		logs.Error("rpc reportLatency error %v", err)
+		s.log.Error("rpc reportLatency error %v", err)
 		return "-1", err
 
 	}
@@ -361,14 +364,14 @@ func (s *Service) getLatency(conn *websocket.Conn) (string, error) {
 	}
 	latencyFloat := float32(int((time.Since(start)/time.Duration(2)).Nanoseconds()*10)) / 10000000
 	latency := fmt.Sprintf("%.1f", latencyFloat)
-	logs.Debug("latency is %vms", latency)
+	s.log.Debug("latency is %vms", latency)
 	return latency, nil
 }
 
 func (s *Service) getNodeInfo(conn *websocket.Conn) (map[string]interface{}, error) {
 	info, err := s.rpc.NodeInfo()
 	if err != nil {
-		logs.Error("rpc getNodeInfo error %v", err)
+		s.log.Error("rpc getNodeInfo error %v", err)
 		s.detectErrorAndReport(conn)
 		return nil, err
 	}
@@ -399,7 +402,7 @@ func (s *Service) getNodeInfo(conn *websocket.Conn) (map[string]interface{}, err
 func (s *Service) getNodeStats(conn *websocket.Conn) (map[string]interface{}, error) {
 	stats, err := s.rpc.NodeStats()
 	if err != nil {
-		logs.Error("rpc getNodeStats error %v", err)
+		s.log.Error("rpc getNodeStats error %v", err)
 		s.detectErrorAndReport(conn)
 		return nil, err
 	}
@@ -421,7 +424,7 @@ func (s *Service) reportCurrentBlock(conn *websocket.Conn) error {
 func (s *Service) getCurrentBlockInfo(conn *websocket.Conn) (map[string]interface{}, error) {
 	block, err := s.rpc.CurrentBlock()
 	if err != nil {
-		logs.Error("rpc getCurrentBlockInfo error %v", err)
+		s.log.Error("rpc getCurrentBlockInfo error %v", err)
 		s.detectErrorAndReport(conn)
 		return nil, err
 	}
@@ -447,7 +450,7 @@ func (s *Service) reportCurrentBlockInfo(conn *websocket.Conn) error {
 
 	blockInfo, err := s.getCurrentBlockInfo(conn)
 	if err != nil {
-		logs.Error("rpc reportCurrentBlockInfo error %v", err)
+		s.log.Error("rpc reportCurrentBlockInfo error %v", err)
 		return err
 	}
 
@@ -458,10 +461,10 @@ func (s *Service) reportCurrentBlockInfo(conn *websocket.Conn) error {
 			"emit": {"block", blockInfo},
 		}
 		jsonReport, _ := json.Marshal(report)
-		logs.Debug("Sending node current block to monitor\n %v", string(jsonReport))
+		s.log.Debug("Sending node current block to monitor\n %v", string(jsonReport))
 		return websocket.JSON.Send(conn, report)
 	} else {
-		logs.Debug("no Sending node current block to monitor, currentBlockHeight: %v, latestBlockHeight: %v", s.currentBlockHeight, s.latestBlockHeight)
+		s.log.Debug("no Sending node current block to monitor, currentBlockHeight: %v, latestBlockHeight: %v", s.currentBlockHeight, s.latestBlockHeight)
 	}
 	return nil
 }
@@ -470,24 +473,24 @@ func (s *Service) reportCurrentBlockInfo(conn *websocket.Conn) error {
 func (s *Service) reportAllNodeInfo(conn *websocket.Conn) error {
 	info, err := s.getNodeInfo(conn)
 	if err != nil {
-		logs.Error("reportAllNodeInfo %v", err)
+		s.log.Error("reportAllNodeInfo %v", err)
 		return err
 	}
 
 	block, err := s.getCurrentBlockInfo(conn)
 	if err != nil {
-		logs.Error("reportAllNodeInfo %v", err)
+		s.log.Error("reportAllNodeInfo %v", err)
 		return err
 	}
 
 	stats, err := s.getNodeStats(conn)
 	if err != nil {
-		logs.Error("reportAllNodeInfo %v", err)
+		s.log.Error("reportAllNodeInfo %v", err)
 		return err
 	}
 	latency, err := s.getLatency(conn)
 	if err != nil {
-		logs.Error("reportAllNodeInfo %v", err)
+		s.log.Error("reportAllNodeInfo %v", err)
 		return err
 	}
 
@@ -502,14 +505,14 @@ func (s *Service) reportAllNodeInfo(conn *websocket.Conn) error {
 		"emit": {"hello", allNodeInfo},
 	}
 	jsonReport, _ := json.Marshal(report)
-	logs.Debug("Sending node all info to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node all info to monitor\n %v", string(jsonReport))
 	return websocket.JSON.Send(conn, report)
 }
 
 func (s *Service) getCoinBase(conn *websocket.Conn) (string, error) {
 	minerInfo, err := s.rpc.GetInfo()
 	if err != nil {
-		logs.Error("rpc getCoinBase error %v", err)
+		s.log.Error("rpc getCoinBase error %v", err)
 		s.detectErrorAndReport(conn)
 		return "", err
 	}
@@ -520,19 +523,19 @@ func (s *Service) getCoinBase(conn *websocket.Conn) (string, error) {
 func (s *Service) detectErrorAndReport(conn *websocket.Conn) error {
 	s.currentErrorTimes++
 	if s.currentErrorTimes >= s.reportErrorAfterTimes {
-		logs.Error("conn error occur times: %v >= %v, will report error", s.currentErrorTimes, s.reportErrorAfterTimes)
+		s.log.Error("conn error occur times: %v >= %v, will report error", s.currentErrorTimes, s.reportErrorAfterTimes)
 		s.currentErrorTimes = 0
-		return reportServerError(s.node, conn)
+		return reportServerError(s, conn)
 	} else {
-		logs.Debug("conn error occur times: %v < %v", s.currentErrorTimes, s.reportErrorAfterTimes)
+		s.log.Debug("conn error occur times: %v < %v", s.currentErrorTimes, s.reportErrorAfterTimes)
 	}
 	return nil
 }
 
 // reportServerError report the error to monitor server
-func reportServerError(node string, conn *websocket.Conn) error {
+func reportServerError(s *Service, conn *websocket.Conn) error {
 	nodeStats := map[string]interface{}{
-		"id": node,
+		"id": s.node,
 		"stats": map[string]interface{}{
 			"active":  false,
 			"syncing": false,
@@ -542,6 +545,6 @@ func reportServerError(node string, conn *websocket.Conn) error {
 		"emit": {"stats", nodeStats},
 	}
 	jsonReport, _ := json.Marshal(report)
-	logs.Debug("Sending node error info to monitor\n %v", string(jsonReport))
+	s.log.Debug("Sending node error info to monitor\n %v", string(jsonReport))
 	return websocket.JSON.Send(conn, report)
 }
